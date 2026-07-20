@@ -1,10 +1,12 @@
 package com.example.data
 
 import android.content.Context
+import androidx.annotation.Keep
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
+@Keep
 @Database(entities = [Clip::class], version = 1, exportSchema = false)
 abstract class ClipDatabase : RoomDatabase() {
     abstract fun clipDao(): ClipDao

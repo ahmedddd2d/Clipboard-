@@ -2,6 +2,23 @@
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
 
+# Keep AndroidX Keep annotations
+-keep @androidx.annotation.Keep class * { *; }
+-keepclassmembers class * {
+    @androidx.annotation.Keep *;
+}
+
+# Keep our models, DAOs, Database, and Services
+-keep class com.example.data.** { *; }
+-keep class com.example.service.** { *; }
+
+# Keep Room database and its generated code
+-keep class androidx.room.** { *; }
+-dontwarn androidx.room.**
+
+# Keep ClipboardManager and its listener methods/callbacks
+-keep class android.content.ClipboardManager$OnPrimaryClipChangedListener { *; }
+
 # Retrofit rules
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
@@ -22,10 +39,6 @@
 -keepclassmembers class * {
     @com.squareup.moshi.Json <fields>;
 }
-
-# Room Database rules
--keep class * extends androidx.room.RoomDatabase
--dontwarn androidx.room.paging.**
 
 # Keep model/entity classes from being obfuscated/stripped if they are serialized
 -keepclassmembers class * implements java.io.Serializable {

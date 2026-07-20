@@ -80,7 +80,9 @@ import com.example.data.Clip
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
+import androidx.annotation.Keep
 
+@Keep
 class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -100,6 +102,11 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
 
     private lateinit var windowManager: WindowManager
     private lateinit var composeView: ComposeView
+    private lateinit var clipboardManager: ClipboardManager
+
+    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+        checkAndAutoAddClipboard()
+    }
 
     private var isExpanded by mutableStateOf(false)
     private var bubbleXState by mutableStateOf(-1)
@@ -112,7 +119,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
 
     // Bubble size calculation
     private val bubbleSizePx by lazy {
-        (58 * resources.displayMetrics.density).toInt()
+        (48 * resources.displayMetrics.density).toInt()
     }
 
     private val collapsedParams by lazy {
@@ -171,6 +178,14 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         bubbleYState = (screenHeight * 0.4f).toInt()
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+
+        // Register Clipboard PrimaryClipChangedListener
+        clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        try {
+            clipboardManager.addPrimaryClipChangedListener(clipboardListener)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         startNotification()
         setupOverlay()
@@ -292,7 +307,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         var isDragging by remember { mutableStateOf(false) }
 
         val isTouched = isPressed || isDragging
-        val targetAlpha = if (isTouched) 0.7f else 0.2f
+        val targetAlpha = if (isTouched) 0.8f else 0.12f
         val alpha by animateFloatAsState(
             targetValue = targetAlpha,
             animationSpec = if (isTouched) {
@@ -305,18 +320,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
 
         Box(
             modifier = Modifier
-                .size(58.dp)
-                .alpha(alpha)
-                .shadow(6.dp, CircleShape)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
-                        )
-                    )
-                )
+                .size(48.dp)
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = {
@@ -347,7 +351,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                 }
                 .clickable(
                     interactionSource = interactionSource,
-                    indication = LocalIndication.current,
+                    indication = null,
                     onClick = {
                         if (isInsideExpanded) {
                             collapseOverlay()
@@ -358,12 +362,29 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.ContentPaste,
-                contentDescription = "Open Clips Overlay",
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(26.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(20.dp)
+                    .alpha(alpha)
+                    .shadow(3.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentPaste,
+                    contentDescription = "Open Clips Overlay",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(10.dp)
+                )
+            }
         }
     }
 
@@ -1112,6 +1133,16 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         myViewModelStore.clear()
         serviceScope.cancel()
+
+        // Unregister Clipboard PrimaryClipChangedListener
+        if (::clipboardManager.isInitialized) {
+            try {
+                clipboardManager.removePrimaryClipChangedListener(clipboardListener)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         try {
             windowManager.removeView(composeView)
         } catch (e: Exception) {

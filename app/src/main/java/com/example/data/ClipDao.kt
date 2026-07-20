@@ -1,5 +1,6 @@
 package com.example.data
 
+import androidx.annotation.Keep
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -7,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
+@Keep
 @Dao
 interface ClipDao {
     @Query("SELECT * FROM clips ORDER BY isPinned DESC, timestamp DESC")
