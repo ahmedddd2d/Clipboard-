@@ -254,7 +254,10 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
     private fun expandOverlay() {
         isExpanded = true
         windowManager.updateViewLayout(composeView, expandedParams)
-        checkAndAutoAddClipboard()
+        serviceScope.launch {
+            delay(150)
+            checkAndAutoAddClipboard()
+        }
     }
 
     private fun collapseOverlay() {

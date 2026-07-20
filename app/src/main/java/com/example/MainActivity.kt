@@ -85,12 +85,30 @@ fun MainScreen() {
         mutableStateOf(isServiceRunning(context, ClipboardOverlayService::class.java))
     }
 
-    // Monitor overlay permission when returning to activity
+    // Monitor overlay permission and auto-save clipboard when returning to activity
     DisposableEffect(Unit) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isPermissionGranted = Settings.canDrawOverlays(context)
                 isServiceRunningState = isServiceRunning(context, ClipboardOverlayService::class.java)
+                
+                // Auto-save from clipboard on resume
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                if (clipboard.hasPrimaryClip()) {
+                    val clipData = clipboard.primaryClip
+                    if (clipData != null && clipData.itemCount > 0) {
+                        val text = clipData.getItemAt(0).text?.toString()
+                        if (!text.isNullOrBlank()) {
+                            scope.launch {
+                                val latest = repository.allClips.firstOrNull()?.firstOrNull()
+                                if (latest == null || latest.text != text) {
+                                    repository.insert(Clip(text = text))
+                                    Toast.makeText(context, "New clip captured", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         val lifecycle = (context as ComponentActivity).lifecycle
