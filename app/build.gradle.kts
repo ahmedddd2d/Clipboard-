@@ -41,10 +41,18 @@ android {
 
   buildTypes {
     release {
-      isCrunchPngs = false
-      isMinifyEnabled = false
+      isCrunchPngs = true
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      
+      // Fallback to debugConfig if KEYSTORE_PATH or STORE_PASSWORD is not set (e.g. in default GitHub Actions)
+      val hasKeystoreEnv = !System.getenv("STORE_PASSWORD").isNullOrEmpty()
+      signingConfig = if (hasKeystoreEnv) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debugConfig")
+      }
     }
     debug { signingConfig = signingConfigs.getByName("debugConfig") }
   }
