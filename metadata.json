@@ -1,0 +1,6 @@
+{
+  "name": "Serene Clip",
+  "description": "An ultra-lightweight, calming floating clipboard manager.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
