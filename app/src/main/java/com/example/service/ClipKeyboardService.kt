@@ -14,9 +14,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -99,19 +102,15 @@ class ClipKeyboardService : InputMethodService(), LifecycleOwner, ViewModelStore
             if (clipboardManager.hasPrimaryClip()) {
                 val clipData = clipboardManager.primaryClip
                 if (clipData != null && clipData.itemCount > 0) {
-                    val text = clipData.getItemAt(0).coerceToText(this)?.toString()
+                    val text = clipData.getItemAt(0).coerceToText(this)?.toString()?.trim()
                     if (!text.isNullOrBlank()) {
                         if (DeletedClipsManager.isDeleted(text)) {
                             return
                         } else {
                             DeletedClipsManager.clearAll()
                         }
-                        serviceScope.launch {
-                            val repository = SereneClipApp.instance.repository
-                            val latest = repository.getLatestClipByTimestamp()
-                            if (latest == null || latest.text != text) {
-                                repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
-                            }
+                        serviceScope.launch(Dispatchers.IO) {
+                            SereneClipApp.instance.repository.saveClip(text)
                         }
                     }
                 }
@@ -136,8 +135,8 @@ class ClipKeyboardService : InputMethodService(), LifecycleOwner, ViewModelStore
                         onBackspace = {
                             currentInputConnection?.deleteSurroundingText(1, 0)
                         },
-                        onEnter = {
-                            currentInputConnection?.performEditorAction(EditorInfo.IME_ACTION_DONE)
+                        onSyncClipboard = {
+                            checkAndSaveClipboard()
                         },
                         onSwitchKeyboard = {
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -151,7 +150,7 @@ class ClipKeyboardService : InputMethodService(), LifecycleOwner, ViewModelStore
                 }
             }
         }
-        return composeView
+return composeView
     }
 }
 
@@ -159,11 +158,53 @@ class ClipKeyboardService : InputMethodService(), LifecycleOwner, ViewModelStore
 fun KeyboardUI(
     onCommitText: (String) -> Unit,
     onBackspace: () -> Unit,
-    onEnter: () -> Unit,
+    onSyncClipboard: () -> Unit,
     onSwitchKeyboard: () -> Unit
 ) {
     val repository = remember { SereneClipApp.instance.repository }
     val clips by repository.allClips.collectAsState(initial = emptyList())
+    var showManualAddDialog by remember { mutableStateOf(false) }
+    var manualText by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        onSyncClipboard()
+    }
+
+    if (showManualAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showManualAddDialog = false },
+            title = { Text("إضافة نص جديد للحافظة", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                OutlinedTextField(
+                    value = manualText,
+                    onValueChange = { manualText = it },
+                    label = { Text("اكتب أو الصق النص هنا") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (manualText.isNotBlank()) {
+                            scope.launch(Dispatchers.IO) {
+                                repository.saveClip(manualText)
+                            }
+                            manualText = ""
+                            showManualAddDialog = false
+                        }
+                    }
+                ) {
+                    Text("حفظ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showManualAddDialog = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
 
     Surface(
         modifier = Modifier
@@ -202,6 +243,30 @@ fun KeyboardUI(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Manual Add Clip button
+                    IconButton(
+                        onClick = { showManualAddDialog = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Text",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Sync/Refresh Clipboard button
+                    IconButton(
+                        onClick = { onSyncClipboard() },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Clipboard",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     // Backspace button
                     IconButton(
                         onClick = onBackspace,
@@ -222,7 +287,7 @@ fun KeyboardUI(
                         Icon(
                             imageVector = Icons.Default.Language,
                             contentDescription = "Switch Keyboard",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -237,14 +302,23 @@ fun KeyboardUI(
                         .background(
                             MaterialTheme.colorScheme.surface,
                             shape = RoundedCornerShape(12.dp)
-                        ),
+                        )
+                        .clickable { onSyncClipboard() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "لا توجد نصوص منسوخة بعد. انسخ أي نص وسيظهر هنا فوراً!",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "لا توجد نصوص منسوخة بعد.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = "اضغط هنا لقراءة المنسوخ من النظام 🔄",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             } else {
                 LazyRow(

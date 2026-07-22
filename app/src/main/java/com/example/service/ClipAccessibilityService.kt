@@ -35,6 +35,35 @@ class ClipAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         checkAndSaveClipboard()
+        if (event == null) return
+        try {
+            val eventTexts = event.text
+            if (!eventTexts.isNullOrEmpty()) {
+                for (cs in eventTexts) {
+                    val str = cs?.toString()?.trim()
+                    if (!str.isNullOrBlank() && str.length > 1) {
+                        saveTextIfNew(str)
+                    }
+                }
+            }
+
+            val sourceNode = event.source
+            if (sourceNode != null) {
+                val nodeText = sourceNode.text?.toString()
+                if (!nodeText.isNullOrBlank()) {
+                    val start = sourceNode.textSelectionStart
+                    val end = sourceNode.textSelectionEnd
+                    if (start >= 0 && end > start && end <= nodeText.length) {
+                        val selected = nodeText.substring(start, end).trim()
+                        if (selected.isNotBlank() && selected.length > 1) {
+                            saveTextIfNew(selected)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun onInterrupt() {
@@ -53,6 +82,15 @@ class ClipAccessibilityService : AccessibilityService() {
         serviceScope.cancel()
     }
 
+    private fun saveTextIfNew(text: String) {
+        if (text.isBlank()) return
+        if (DeletedClipsManager.isDeleted(text)) return
+        DeletedClipsManager.clearAll()
+        serviceScope.launch(Dispatchers.IO) {
+            SereneClipApp.instance.repository.saveClip(text)
+        }
+    }
+
     private fun checkAndSaveClipboard() {
         try {
             if (!::clipboardManager.isInitialized) {
@@ -61,21 +99,9 @@ class ClipAccessibilityService : AccessibilityService() {
             if (clipboardManager.hasPrimaryClip()) {
                 val clipData = clipboardManager.primaryClip
                 if (clipData != null && clipData.itemCount > 0) {
-                    val text = clipData.getItemAt(0).coerceToText(this@ClipAccessibilityService)?.toString()
+                    val text = clipData.getItemAt(0).coerceToText(this@ClipAccessibilityService)?.toString()?.trim()
                     if (!text.isNullOrBlank()) {
-                        if (DeletedClipsManager.isDeleted(text)) {
-                            return
-                        } else {
-                            DeletedClipsManager.clearAll()
-                        }
-
-                        serviceScope.launch {
-                            val repository = SereneClipApp.instance.repository
-                            val latest = repository.getLatestClipByTimestamp()
-                            if (latest == null || latest.text != text) {
-                                repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
-                            }
-                        }
+                        saveTextIfNew(text)
                     }
                 }
             }

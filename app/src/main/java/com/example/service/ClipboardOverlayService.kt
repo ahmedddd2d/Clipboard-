@@ -278,26 +278,27 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
     }
 
     private fun checkAndAutoAddClipboard() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (clipboard.hasPrimaryClip()) {
-            val clipData = clipboard.primaryClip
-            if (clipData != null && clipData.itemCount > 0) {
-                val text = clipData.getItemAt(0).coerceToText(this@ClipboardOverlayService)?.toString()
-                if (!text.isNullOrBlank()) {
-                    if (DeletedClipsManager.isDeleted(text)) {
-                        return
-                    } else {
-                        DeletedClipsManager.clearAll()
-                    }
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            if (clipboard.hasPrimaryClip()) {
+                val clipData = clipboard.primaryClip
+                if (clipData != null && clipData.itemCount > 0) {
+                    val text = clipData.getItemAt(0).coerceToText(this@ClipboardOverlayService)?.toString()?.trim()
+                    if (!text.isNullOrBlank()) {
+                        if (DeletedClipsManager.isDeleted(text)) {
+                            return
+                        } else {
+                            DeletedClipsManager.clearAll()
+                        }
 
-                    serviceScope.launch {
-                        val latest = repository.getLatestClipByTimestamp()
-                        if (latest == null || latest.text != text) {
-                            repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
+                        serviceScope.launch(Dispatchers.IO) {
+                            repository.saveClip(text)
                         }
                     }
                 }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

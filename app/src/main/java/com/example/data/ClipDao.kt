@@ -29,6 +29,9 @@ interface ClipDao {
     @Query("DELETE FROM clips WHERE isPinned = 0 AND timestamp < :cutoff")
     suspend fun deleteOldUnpinnedClips(cutoff: Long)
 
+    @Query("SELECT * FROM clips WHERE text = :text LIMIT 1")
+    suspend fun getClipByText(text: String): Clip?
+
     @Query("SELECT * FROM clips ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestClipByTimestamp(): Clip?
 

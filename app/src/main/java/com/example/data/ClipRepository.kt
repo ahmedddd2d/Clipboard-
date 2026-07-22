@@ -25,6 +25,21 @@ class ClipRepository(private val clipDao: ClipDao) {
         clipDao.deleteOldUnpinnedClips(cutoff)
     }
 
+    suspend fun getClipByText(text: String): Clip? {
+        return clipDao.getClipByText(text)
+    }
+
+    suspend fun saveClip(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return
+        val existing = clipDao.getClipByText(trimmed)
+        if (existing != null) {
+            clipDao.updateClip(existing.copy(timestamp = System.currentTimeMillis()))
+        } else {
+            clipDao.insertClip(Clip(text = trimmed, timestamp = System.currentTimeMillis()))
+        }
+    }
+
     suspend fun getLatestClipByTimestamp(): Clip? {
         return clipDao.getLatestClipByTimestamp()
     }

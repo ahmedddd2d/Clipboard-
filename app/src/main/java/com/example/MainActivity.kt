@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -112,11 +113,8 @@ fun MainScreen() {
                                 // Ignore currently deleted clip
                             } else {
                                 DeletedClipsManager.clearAll()
-                                scope.launch {
-                                    val latest = repository.getLatestClipByTimestamp()
-                                    if (latest == null || latest.text != text) {
-                                        repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
-                                    }
+                                scope.launch(Dispatchers.IO) {
+                                    repository.saveClip(text)
                                 }
                             }
                         }
