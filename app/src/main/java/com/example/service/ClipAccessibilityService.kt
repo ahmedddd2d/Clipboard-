@@ -17,6 +17,7 @@ class ClipAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private lateinit var clipboardManager: ClipboardManager
+    private var lastSeenClipText: String? = null
 
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         checkAndSaveClipboard()
@@ -34,10 +35,7 @@ class ClipAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED ||
-            event?.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-            checkAndSaveClipboard()
-        }
+        checkAndSaveClipboard()
     }
 
     override fun onInterrupt() {
@@ -69,6 +67,11 @@ class ClipAccessibilityService : AccessibilityService() {
                         if (DeletedClipsManager.isDeleted(text)) {
                             return
                         }
+                        if (text == lastSeenClipText) {
+                            return
+                        }
+                        lastSeenClipText = text
+
                         serviceScope.launch {
                             val repository = SereneClipApp.instance.repository
                             val latest = repository.allClips.firstOrNull()?.firstOrNull()
@@ -76,7 +79,7 @@ class ClipAccessibilityService : AccessibilityService() {
                                 repository.insert(Clip(text = text))
                                 Toast.makeText(
                                     this@ClipAccessibilityService,
-                                    "New clip captured automatically",
+                                    "تم حفظ النص المنسوخ تلقائياً",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }

@@ -123,6 +123,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
     private var isExpanded by mutableStateOf(false)
     private var bubbleXState by mutableStateOf(-1)
     private var bubbleYState by mutableStateOf(-1)
+    private var lastSeenClipText: String? = null
     private val repository by lazy { SereneClipApp.instance.repository }
 
     // Screen dimensions
@@ -287,11 +288,16 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                     if (DeletedClipsManager.isDeleted(text)) {
                         return
                     }
+                    if (text == lastSeenClipText) {
+                        return
+                    }
+                    lastSeenClipText = text
+
                     serviceScope.launch {
                         val latest = repository.allClips.firstOrNull()?.firstOrNull()
                         if (latest == null || latest.text != text) {
                             repository.insert(Clip(text = text))
-                            Toast.makeText(this@ClipboardOverlayService, "New clip captured", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@ClipboardOverlayService, "تم حفظ النص المنسوخ تلقائياً", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
