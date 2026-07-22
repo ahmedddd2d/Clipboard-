@@ -34,11 +34,7 @@ class ClipAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED ||
-            event?.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED ||
-            event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            checkAndSaveClipboard()
-        }
+        checkAndSaveClipboard()
     }
 
     override fun onInterrupt() {
@@ -69,18 +65,15 @@ class ClipAccessibilityService : AccessibilityService() {
                     if (!text.isNullOrBlank()) {
                         if (DeletedClipsManager.isDeleted(text)) {
                             return
+                        } else {
+                            DeletedClipsManager.clearAll()
                         }
 
                         serviceScope.launch {
                             val repository = SereneClipApp.instance.repository
-                            val latest = repository.allClips.firstOrNull()?.firstOrNull()
+                            val latest = repository.getLatestClipByTimestamp()
                             if (latest == null || latest.text != text) {
-                                repository.insert(Clip(text = text))
-                                Toast.makeText(
-                                    this@ClipAccessibilityService,
-                                    "تم حفظ النص المنسوخ تلقائياً",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
                             }
                         }
                     }

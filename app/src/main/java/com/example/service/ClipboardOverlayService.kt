@@ -286,13 +286,14 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                 if (!text.isNullOrBlank()) {
                     if (DeletedClipsManager.isDeleted(text)) {
                         return
+                    } else {
+                        DeletedClipsManager.clearAll()
                     }
 
                     serviceScope.launch {
-                        val latest = repository.allClips.firstOrNull()?.firstOrNull()
+                        val latest = repository.getLatestClipByTimestamp()
                         if (latest == null || latest.text != text) {
-                            repository.insert(Clip(text = text))
-                            Toast.makeText(this@ClipboardOverlayService, "تم حفظ النص المنسوخ تلقائياً", Toast.LENGTH_SHORT).show()
+                            repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
                         }
                     }
                 }

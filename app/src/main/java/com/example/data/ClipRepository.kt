@@ -25,6 +25,10 @@ class ClipRepository(private val clipDao: ClipDao) {
         clipDao.deleteOldUnpinnedClips(cutoff)
     }
 
+    suspend fun getLatestClipByTimestamp(): Clip? {
+        return clipDao.getLatestClipByTimestamp()
+    }
+
     suspend fun deleteAll() {
         clipDao.deleteAllClips()
     }

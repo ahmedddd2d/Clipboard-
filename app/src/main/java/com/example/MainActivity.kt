@@ -106,13 +106,17 @@ fun MainScreen() {
                 if (clipboard.hasPrimaryClip()) {
                     val clipData = clipboard.primaryClip
                     if (clipData != null && clipData.itemCount > 0) {
-                        val text = clipData.getItemAt(0).text?.toString()
-                        if (!text.isNullOrBlank() && !DeletedClipsManager.isDeleted(text)) {
-                            scope.launch {
-                                val latest = repository.allClips.firstOrNull()?.firstOrNull()
-                                if (latest == null || latest.text != text) {
-                                    repository.insert(Clip(text = text))
-                                    Toast.makeText(context, "New clip captured", Toast.LENGTH_SHORT).show()
+                        val text = clipData.getItemAt(0).coerceToText(context)?.toString()
+                        if (!text.isNullOrBlank()) {
+                            if (DeletedClipsManager.isDeleted(text)) {
+                                // Ignore currently deleted clip
+                            } else {
+                                DeletedClipsManager.clearAll()
+                                scope.launch {
+                                    val latest = repository.getLatestClipByTimestamp()
+                                    if (latest == null || latest.text != text) {
+                                        repository.insert(Clip(text = text, timestamp = System.currentTimeMillis()))
+                                    }
                                 }
                             }
                         }
