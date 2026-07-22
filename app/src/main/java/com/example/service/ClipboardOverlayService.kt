@@ -77,6 +77,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.SereneClipApp
 import com.example.data.Clip
+import com.example.data.DeletedClipsManager
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.firstOrNull
@@ -105,6 +106,17 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
     private lateinit var clipboardManager: ClipboardManager
 
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+        try {
+            val clipData = clipboardManager.primaryClip
+            if (clipData != null && clipData.itemCount > 0) {
+                val text = clipData.getItemAt(0).text?.toString()
+                if (!text.isNullOrBlank()) {
+                    DeletedClipsManager.unmarkDeleted(text)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         checkAndAutoAddClipboard()
     }
 
@@ -272,6 +284,9 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
             if (clipData != null && clipData.itemCount > 0) {
                 val text = clipData.getItemAt(0).text?.toString()
                 if (!text.isNullOrBlank()) {
+                    if (DeletedClipsManager.isDeleted(text)) {
+                        return
+                    }
                     serviceScope.launch {
                         val latest = repository.allClips.firstOrNull()?.firstOrNull()
                         if (latest == null || latest.text != text) {
@@ -652,6 +667,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                                             if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
                                                 serviceScope.launch {
                                                     recentlyDeletedClip = clip
+                                                    DeletedClipsManager.markAsDeleted(clip.text)
                                                     repository.deleteById(clip.id)
                                                     val result = snackbarHostState.showSnackbar(
                                                         message = "Clip deleted",
@@ -660,6 +676,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
                                                     )
                                                     if (result == SnackbarResult.ActionPerformed) {
                                                         recentlyDeletedClip?.let { restored ->
+                                                            DeletedClipsManager.unmarkDeleted(restored.text)
                                                             repository.insert(restored)
                                                         }
                                                     }
@@ -1112,6 +1129,7 @@ class ClipboardOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, 
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = android.content.ClipData.newPlainText("Copied Clip", text)
         clipboard.setPrimaryClip(clip)
+        DeletedClipsManager.unmarkDeleted(text)
     }
 
     private fun formatTimestamp(timestamp: Long): String {

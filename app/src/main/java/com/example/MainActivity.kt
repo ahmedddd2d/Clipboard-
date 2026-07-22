@@ -1,12 +1,14 @@
 package com.example
 
 import android.app.ActivityManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.TextUtils
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -52,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.Clip
+import com.example.data.DeletedClipsManager
+import com.example.service.ClipAccessibilityService
 import com.example.service.ClipboardOverlayService
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.flow.firstOrNull
@@ -85,20 +89,25 @@ fun MainScreen() {
         mutableStateOf(isServiceRunning(context, ClipboardOverlayService::class.java))
     }
 
+    var isAccessibilityEnabled by remember {
+        mutableStateOf(isAccessibilityServiceEnabled(context, ClipAccessibilityService::class.java))
+    }
+
     // Monitor overlay permission and auto-save clipboard when returning to activity
     DisposableEffect(Unit) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isPermissionGranted = Settings.canDrawOverlays(context)
                 isServiceRunningState = isServiceRunning(context, ClipboardOverlayService::class.java)
+                isAccessibilityEnabled = isAccessibilityServiceEnabled(context, ClipAccessibilityService::class.java)
                 
-                // Auto-save from clipboard on resume
+                 // Auto-save from clipboard on resume
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 if (clipboard.hasPrimaryClip()) {
                     val clipData = clipboard.primaryClip
                     if (clipData != null && clipData.itemCount > 0) {
                         val text = clipData.getItemAt(0).text?.toString()
-                        if (!text.isNullOrBlank()) {
+                        if (!text.isNullOrBlank() && !DeletedClipsManager.isDeleted(text)) {
                             scope.launch {
                                 val latest = repository.allClips.firstOrNull()?.firstOrNull()
                                 if (latest == null || latest.text != text) {
@@ -231,6 +240,18 @@ fun MainScreen() {
                         }
                     }
                 )
+                Spacer(modifier = Modifier.height(10.dp))
+                AccessibilityControlCard(
+                    isEnabled = isAccessibilityEnabled,
+                    onOpenSettings = {
+                        try {
+                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "إعدادات سهولة الوصول غير متاحة", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -308,6 +329,7 @@ fun MainScreen() {
                                 if (dismissValue == SwipeToDismissBoxValue.EndToStart || dismissValue == SwipeToDismissBoxValue.StartToEnd) {
                                     scope.launch {
                                         recentlyDeletedClip = clip
+                                        DeletedClipsManager.markAsDeleted(clip.text)
                                         repository.deleteById(clip.id)
                                         val result = snackbarHostState.showSnackbar(
                                             message = "Clip deleted",
@@ -316,6 +338,7 @@ fun MainScreen() {
                                         )
                                         if (result == SnackbarResult.ActionPerformed) {
                                             recentlyDeletedClip?.let { restored ->
+                                                DeletedClipsManager.unmarkDeleted(restored.text)
                                                 repository.insert(restored)
                                             }
                                         }
@@ -354,6 +377,7 @@ fun MainScreen() {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                         val data = android.content.ClipData.newPlainText("Copied Clip", text)
                                         clipboard.setPrimaryClip(data)
+                                        DeletedClipsManager.unmarkDeleted(text)
                                         val msg = if (isFull) "Full Text Copied" else "Selected Phrase Copied"
                                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                     },
@@ -916,4 +940,80 @@ fun isServiceRunning(context: Context, serviceClass: Class<*>): Boolean {
         }
     }
     return false
+}
+
+fun isAccessibilityServiceEnabled(context: Context, serviceClass: Class<*>): Boolean {
+    val expectedComponentName = ComponentName(context, serviceClass)
+    val enabledServicesSetting = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+    val stringSplitter = TextUtils.SimpleStringSplitter(':')
+    stringSplitter.setString(enabledServicesSetting)
+    while (stringSplitter.hasNext()) {
+        val componentNameString = stringSplitter.next()
+        val enabledComponent = ComponentName.unflattenFromString(componentNameString)
+        if (enabledComponent != null && enabledComponent == expectedComponentName) {
+            return true
+        }
+    }
+    return false
+}
+
+@Composable
+fun AccessibilityControlCard(
+    isEnabled: Boolean,
+    onOpenSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isEnabled) {
+                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isEnabled) Icons.Default.CheckCircle else Icons.Default.AccessibilityNew,
+                        contentDescription = null,
+                        tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isEnabled) "النسخ التلقائي المباشر مُفعّل" else "تفعيل النسخ المباشر (Accessibility)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (isEnabled) "خدمة الوصول تعمل الآن وسوف تحفظ النصوص تلقائياً بدون الحاجة لفتح الفقاعة." else "اضغط لتفعيل الخدمة من إعدادات الوصول بالهاتف لحفظ أي نص فور نسخِه.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            OutlinedButton(
+                onClick = onOpenSettings,
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(if (isEnabled) "الإعدادات" else "تفعيل", fontSize = 12.sp)
+            }
+        }
+    }
 }

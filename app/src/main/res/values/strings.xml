@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Serene Clip</string>
+    <string name="accessibility_service_description">يقوم بتسجيل النصوص المنسوخة تلقائياً في الخلفية بدون الحاجة لفتح الفقاعة أو التطبيق.</string>
 </resources>
