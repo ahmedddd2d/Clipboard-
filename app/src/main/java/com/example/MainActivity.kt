@@ -256,6 +256,8 @@ fun MainScreen() {
                         }
                     }
                 )
+                Spacer(modifier = Modifier.height(10.dp))
+                KeyboardControlCard()
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -1017,6 +1019,114 @@ fun AccessibilityControlCard(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(if (isEnabled) "الإعدادات" else "تفعيل", fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+fun isKeyboardEnabled(context: Context): Boolean {
+    val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+    val enabledMethods = imm?.enabledInputMethodList ?: return false
+    return enabledMethods.any { it.packageName == context.packageName }
+}
+
+@Composable
+fun KeyboardControlCard() {
+    val context = LocalContext.current
+    var isEnabled by remember { mutableStateOf(isKeyboardEnabled(context)) }
+
+    DisposableEffect(Unit) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isEnabled = isKeyboardEnabled(context)
+            }
+        }
+        val lifecycle = (context as? androidx.lifecycle.LifecycleOwner)?.lifecycle
+        lifecycle?.addObserver(observer)
+        onDispose {
+            lifecycle?.removeObserver(observer)
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isEnabled) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isEnabled) Icons.Default.CheckCircle else Icons.Default.Keyboard,
+                            contentDescription = null,
+                            tint = if (isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEnabled) "لوحة المفاتيح الحافظة مُفعلة" else "تفعيل لوحة المفاتيح الحافظة (حل مضاعف)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "لوحة مفاتيح خفيفة تتيح لك الوصول الفوري والكامل للحافظة واللصق بضغطة واحدة من أي تطبيق.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "تعذر فتح إعدادات لوحة المفاتيح", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text(if (isEnabled) "إعدادات الكيبورد" else "1. تفعيل الكيبورد", fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = {
+                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                        imm?.showInputMethodPicker()
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    Text("2. اختيار الكيبورد", fontSize = 12.sp)
+                }
             }
         }
     }
